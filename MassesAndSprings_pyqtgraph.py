@@ -16,12 +16,12 @@ from random import random
 # gravitational acceleration on Earth in m*s^-2
 g = 0  #9.81
 Ks = 50.  # spring constant
-Kd = 0.2   # dashpot constant (viscous)
-Kv = 0.1  # ball damping (viscous)
+Kd = 0.3   # dashpot constant (viscous)
+Kv = 0.2  # ball damping (viscous)
 eqdist = 0.25  # equilibrium distance of spring
 m = 1  # mass of ball
 
-Nballs = 22
+Nballs = 8
 
 # acceleration vector due to g
 ag = np.array([0., 0., -g]).reshape((1,3))
@@ -34,23 +34,20 @@ ylim = xlim
 zlim = xlim  #[0., 2.]
 
 #  delta t
-delta_t = 0.001
+delta_t = 0.002
 
 # create figure
 app = QtGui.QApplication([])
 w = gl.GLViewWidget()
-w.opts['distance'] = 2
+w.setBackgroundColor('k')
+w.opts['distance'] = 1
 w.show()
 w.setWindowTitle('Masses and Springs')
 
 #g = gl.GLGridItem()
 #w.addItem(g)
-
-g = gl.GLAxisItem()
-w.addItem(g)
-
-md = gl.MeshData.sphere(rows=20, cols=40, radius=0.05)
-
+#g = gl.GLAxisItem()
+#w.addItem(g)
 
 #%% DEFINE CLASS
 class Ball():
@@ -62,13 +59,18 @@ class Ball():
         # cast inputs as 2-d numpy arrays
         self.xy = xy.reshape((1,3)) #np.array(xy)
         self.v = v.reshape((1,3))  #np.array(v)
-
-        # set up a plot object, which we will reference later.
-        #self.scatter = gl.GLScatterPlotItem(pos=self.xy, color=(1,1,1,1), \
-        #                            size=0.1, pxMode=False)
+        
+        # generate sphere data and colors.
+        md = gl.MeshData.sphere(rows=10, cols=20, radius=0.05)
+        color = np.random.randint(1,5, (1,4)) /4
+        #color[0,3] = 1
+        colors = np.repeat(color, md.faces().shape[0], axis=0)
+        md.setFaceColors(colors)
+        
         g = gl.GLMeshItem(meshdata=md, smooth=True)
         g.setShader('shaded')
         g.translate(self.xy[0,0],self.xy[0,1],self.xy[0,2])
+        
         w.addItem(g)
         self.scatter = g
 
@@ -124,7 +126,6 @@ class Ball():
         #self.xy[2] = np.clip(self.xy[2], zlim[0], zlim[1])
 
         # update the scatter plot with the new x and y positions:
-        #self.scatter.setData(pos=self.xy)
         self.scatter.translate(dxy[0,0],dxy[0,1],dxy[0,2])
         
 
@@ -141,14 +142,14 @@ for i in range(Nballs):
 
 #%% ANIMATION ROUTINES
 def animate():
-    for ball in balls:
-        ball.update(balls)
+    for ball in balls:  # loop through every ball
+        ball.update(balls)  # call each ball's update method
 
 		
 #%% CALL ANIMATION
 t = QtCore.QTimer()
 t.timeout.connect(animate)
-t.start(2)
+t.start(2)  # frame delay in ms
 
 import sys
 if sys.flags.interactive != 1 or not hasattr(QtCore, 'PYQT_VERSION'):
