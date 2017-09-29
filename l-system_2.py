@@ -18,7 +18,7 @@ import matplotlib.pyplot as plt
 # dictionary containing the mapping rule
 # this is a tree-like L-System (reference: The Coding Train on YouTube)
 #rule = {'F':'FF+[+F-F-F-F]-[-F+F+F+F]'}; N = 5; scale = 0.75
-#rule = {'F':'FF+[+F-F-F]-[-F+F+F]'}; N = 5; scale = 0.85
+#rule = {'F':'FF+[+F-F-F]-[-F+F+F]'}; N = 6; scale = 0.85
 #rule = {'F':'F[F]+[+F-F-F]-[-F+F+F]'}; N = 5; scale = 0.55
 rule = {'F':'F+[+F]-[-F++F-F]'}; N = 7; scale = 0.55
 
@@ -44,7 +44,7 @@ for i in range(N):
 #################### pot the resulting moves as lines ####################
 ######################### using MATPLOTLIB graphics ######################
 l = 1  # length of forward movement
-ang = 25 * np.pi / 180  # turning angle
+ang = 30 * np.pi / 180  # turning angle
 pos = [(0,0)]  # initial position (list of tuples)
 heading = [90]    # initial heading (list of floats)
 
@@ -114,8 +114,11 @@ for i,point in enumerate(points):
     if point != []:
         pt_array = np.array(point)  # make an array for each level
         
+        #plt.plot(pt_array[:,0],pt_array[:,1],linewidth=0.3, \
+        #         color=colors(i / N), alpha=1)
+        
         plt.plot(pt_array[:,0],pt_array[:,1],linewidth=(N-i-0.5)/2, \
-                 color=colors(i / N), alpha=1)
+                color=colors(i / N), alpha=1)
 
 # plot "leaves" if desired:
 plt.plot(pt_array[:,0],pt_array[:,1],'g*',markersize=4,alpha=0.3)
@@ -123,3 +126,4 @@ plt.plot(pt_array[:,0],pt_array[:,1],'g*',markersize=4,alpha=0.3)
 plt.axis('equal')
 plt.axis('off')
 fig.set_facecolor('black')
+plt.show()
