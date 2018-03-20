@@ -1,12 +1,17 @@
-###############
-# Simple orbit simulator: numnerical integration method
+################################################################################
+# Simple Earth orbit simulator: Kepler's method with coordinate transformations
+#
+# Uses Vernal equinox (UTC) of 2018 as reference time.  However, this does not
+#   coorespond to high no0n at Greenwich... there is an offset +4.25 hours.
+#
+# Uses standard time... convert to DST at own risk.
 #
 # Mike Hanchak, 19MAR2018
 #
-###############
+################################################################################
 import numpy as np
 import matplotlib.pyplot as plt
-import datetime
+import datetime, pytz
 from scipy.optimize import fsolve
 
 deg2rad = np.pi / 180
@@ -46,46 +51,29 @@ speed_perihelion = np.sqrt( mu * (2/perihelion - 1/a))
 
 earth_tilt = 23.43693 * deg2rad
 long_peri = 102.94719 * deg2rad  # rad
-earth_ang_vel = 7.292115090e-5  # rad/s
+earth_ang_vel = 2*np.pi/86164.091   #7.2921159e-5  # rad/s
 earth_period = 2*np.pi*np.sqrt(a**3/mu) / 3600  # hr
 
 # time between perihelion and vernal equinox
+# TIME AT VERNAL EQUINOX IS EPOCH FOR THIS CODE!
 time_perihelion = datetime.datetime(2018, 1, 3, 5, 35, tzinfo=datetime.timezone.utc)
 time_vernal = datetime.datetime(2018, 3, 20, 16, 15, tzinfo=datetime.timezone.utc)
+vernal_offset = time_vernal - datetime.datetime(2018, 3, 20, 12, tzinfo=datetime.timezone.utc)
 delta = time_vernal - time_perihelion
 time_perihelion_vernal = delta.total_seconds() / 3600  # hr
 
 # Dayton, OH
 lat, long = 39.7589 * deg2rad, -84.1916 * deg2rad
+local_tz = pytz.timezone('US/Eastern')
+# # topocentric
+# lat, long = 0,0
+# local_tz = pytz.timezone('UTC')
+# # Greenwich
+# lat, long = 51.476852* deg2rad, -0.000500* deg2rad
+# local_tz = pytz.timezone('UTC')
+
 
 def EarthPosAtTime(t):
-    # position of earth relative to perihelion by direct numerical integration    
-    r_p = np.array([0.9832899 ,0])  # au
-    v_p = np.array([0, speed_perihelion ])  # m/s
-    
-    dt = 1  # hr
-    
-    # initialize vectors
-    r = r_p.copy()
-    v = v_p.copy()
-    
-    #N = np.round(t/dt)
-    T = 0
-    #for i in range(N):
-    while T <= t:
-
-        # SI units
-        a = -mu* r / (np.sqrt(r[0]**2 + r[1]**2))**3 / au**2  # m/s/s
-        
-        v = v + a*dt*3600
-        
-        r = r + v*dt*3600/au
-        
-        T += dt
-        
-    return r
-
-def EarthPosAtTime2(t):
     # position of earth relative to perihelion by Kepler's Method
     # https://en.wikipedia.org/wiki/True_anomaly
     
@@ -93,9 +81,11 @@ def EarthPosAtTime2(t):
     eccentric_anomaly = fsolve(lambda E:E - ecc*np.sin(E) - mean_anomaly, 0)[0]
     
     #true_anomaly = np.arccos((np.cos(eccentric_anomaly) - ecc)/(1 - ecc*np.cos(eccentric_anomaly)))
-    true_anomaly = 2*np.arctan2(np.sqrt(1+ecc)*np.sin(eccentric_anomaly/2),np.sqrt(1-ecc)*np.cos(eccentric_anomaly/2))
+    num = np.sqrt(1+ecc)*np.sin(eccentric_anomaly/2)
+    den = np.sqrt(1-ecc)*np.cos(eccentric_anomaly/2)
+    true_anomaly = 2*np.arctan2(num, den)
     
-    r_mag = a*(1 - ecc**2) / (1 + np.cos(true_anomaly)) / au
+    r_mag = a*(1 - ecc**2) / (1 + ecc*np.cos(true_anomaly)) / au
     
     return np.array( ( r_mag*np.cos(true_anomaly) , r_mag*np.sin(true_anomaly) ) )
 
@@ -121,41 +111,59 @@ def trans(r):
 
 # sun frame to local frame
 def sunPosition(given_time):
-    # take a given time and output location of sun in local frame (alt and azi)
+    # take a given time relative to vernal equinox and output location of sun in local frame (alt and azi)
 
-    #for given_time in range(12):
-    #for given_time in np.arange(5.5, 9000, 24*10):
-
-    #given_time = 0  # hours since vernal equinox UTC
-
-    r = EarthPosAtTime2(given_time + time_perihelion_vernal)
+    r = EarthPosAtTime(given_time + time_perihelion_vernal)
     
-    greenwich_ang = given_time * earth_ang_vel*3600
+    greenwich_ang = vernal_offset.total_seconds()/3600*15*deg2rad  # angle of greenwich meridian from vernal equinox
+    time_ang = given_time * earth_ang_vel*3600
     
-    mat = rotZ(long_peri)@trans(r)@rotZ(-long_peri)@rotX(earth_tilt)@rotZ(greenwich_ang+long)@rotY(-lat)
+    mat = rotZ(long_peri)@trans(r)@rotZ(-long_peri)@rotX(-earth_tilt)@rotZ(greenwich_ang+long+time_ang)@rotY(-lat)
     
     # get the sun's position in local frame
     sun_fixed = np.array([[0],[0],[0],[1]])
     sun_local = np.linalg.inv(mat) @ sun_fixed
     
     sun_alt = np.arctan2(sun_local[0], np.sqrt(sun_local[1]**2 + sun_local[2]**2))*rad2deg
+    
     sun_azi = 90 + np.arctan2(sun_local[2], sun_local[1])*rad2deg
-
-    return sun_alt, sun_azi
-
-for i in range(0,365,75):
+    if sun_azi > 180:
+        sun_azi -= 360  # adjust angle extents for prettier plot
+    
+    return sun_alt, sun_azi, sun_local
+   
+suns = []
+for day in range(0,365,365):
     alts = []
     azis = []
-    for given_time in np.arange(-6+i*24, 18+i*24, 0.25):
-    #for given_time in np.arange(5.62, 9000, 24):    
-        sun_alt, sun_azi = sunPosition(given_time)
+    
+    for hour in np.arange(-6,6,0.25):  #np.arange(-6+i*24, 17+i*24, 0.25):
+    #for given_time in np.arange(5.62, 9000, 24):
+        given_time = datetime.datetime(2018, 3, 20, 12, 0, tzinfo=local_tz) + datetime.timedelta(hours=day*24+hour)
+        offset = given_time - time_vernal
+        sun_alt, sun_azi, sun_local = sunPosition(offset.total_seconds()/3600)
         alts.append(sun_alt)
         azis.append(sun_azi)
-        
-    plt.plot(azis, alts)
+        suns.append(sun_local[:])
     
-#print(sun_local, sun_alt, sun_azi)
+        plt.plot(sun_azi,sun_alt,'bo')
+        plt.text(sun_azi,sun_alt,given_time.strftime('%d%b%y %H:%M'))
+    
+    plt.plot(azis, alts,'b-')    
+    
+plt.grid(True)
+#given_time = datetime.datetime.now(tz=pytz.timezone('EST'))
+# given_time = datetime.datetime(2018, 3, 20, 12, 36, tzinfo=pytz.timezone('US/Eastern'))
+# offset = given_time - time_vernal + vernal_offset
+# print(sunPosition(offset.total_seconds()/3600))
 
-#plt.plot(r_out[0,:], r_out[1,:])
-#plt.plot(0,0,'ro')
+############## 3D plot of sun in local frame #################    
+# from mpl_toolkits.mplot3d import Axes3D
+# suns = np.concatenate(suns, axis=1)   
+# fig = plt.figure()
+# ax = fig.gca(projection='3d')
+# ax.plot(suns[0,:],suns[1,:],suns[2,:])
+
+
+plt.grid(True)
 plt.show()
